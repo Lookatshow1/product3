@@ -1,0 +1,21 @@
+date_time;channel;status;duration_sec;result;operator_name;reject_reason;patient_id
+2025-01-15 09:02;phone_in;answered;195;booked;Петрова М.В.;;P001
+2025-01-15 09:08;phone_in;answered;120;booked;Петрова М.В.;;P002
+2025-01-15 09:15;phone_in;missed;0;missed;;;
+2025-01-15 09:22;phone_in;answered;45;not_booked;Иванова А.С.;high_price;P003
+2025-01-15 09:30;web_form;answered;0;booked;Сидорова К.А.;;P004
+2025-01-15 09:35;phone_in;answered;210;booked;Петрова М.В.;;P005
+2025-01-15 09:41;phone_in;missed;0;missed;;;
+2025-01-15 09:48;phone_in;answered;30;info_only;Иванова А.С.;;P006
+2025-01-15 09:55;phone_in;answered;180;booked;Сидорова К.А.;;P007
+2025-01-15 10:03;phone_in;answered;15;not_booked;Иванова А.С.;not_now;P008
+2025-01-15 10:10;phone_in;missed;0;missed;;;
+2025-01-15 10:18;phone_in;answered;240;booked;Петрова М.В.;;P009
+2025-01-15 10:25;callback;callback_done;90;booked;Сидорова К.А.;;P010
+2025-01-15 10:33;phone_in;answered;60;not_booked;Иванова А.С.;high_price;P011
+2025-01-15 10:40;phone_in;answered;150;booked;Петрова М.В.;;P012
+2025-01-15 10:48;whatsapp;answered;0;booked;Сидорова К.А.;;P013
+2025-01-15 10:55;phone_in;missed;0;missed;;;
+2025-01-15 11:02;phone_in;answered;180;booked;Петрова М.В.;;P014
+2025-01-15 11:10;phone_in;answered;10;not_booked;Иванова А.С.;not_now;P015
+2025-01-15 11:18;phone_in;answered;200;booked;Сидорова К.А.;;P016

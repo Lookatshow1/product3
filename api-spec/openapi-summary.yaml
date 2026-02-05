@@ -1,0 +1,479 @@
+# CallFlow OS — API Summary (OpenAPI-style, abbreviated)
+# Full OpenAPI spec to be generated from NestJS decorators
+
+openapi: 3.0.3
+info:
+  title: CallFlow OS API
+  version: 1.0.0
+  description: API for dental clinic call quality management
+
+servers:
+  - url: https://api.callflow.ru/api/v1
+    description: Production
+  - url: http://localhost:3001/api/v1
+    description: Development
+
+paths:
+  # ============ AUTH ============
+  /auth/register:
+    post:
+      summary: Register new organization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, name, clinic_name, clinic_type]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                name: { type: string }
+                clinic_name: { type: string }
+                clinic_type: { type: string, enum: [dental, cosmetology, multi, ent, ophthalmology, other] }
+                chairs_count: { type: integer, default: 3 }
+                avg_check: { type: number, default: 5000 }
+                timezone: { type: string, default: "Europe/Moscow" }
+
+  /auth/login:
+    post:
+      summary: Login
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        200:
+          description: JWT tokens
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: { type: string }
+                  user: { $ref: "#/components/schemas/User" }
+
+  /auth/me:
+    get:
+      summary: Get current user
+      security: [{ bearerAuth: [] }]
+
+  # ============ IMPORT ============
+  /import/journal:
+    post:
+      summary: Upload call journal CSV/Excel
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+                column_mapping: { type: object }
+
+  /import/funnel:
+    post:
+      summary: Submit daily funnel data
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [date, calls_total, calls_answered, calls_missed, booked, visited]
+              properties:
+                date: { type: string, format: date }
+                calls_total: { type: integer }
+                calls_answered: { type: integer }
+                calls_missed: { type: integer }
+                booked: { type: integer }
+                visited: { type: integer }
+                avg_check: { type: number }
+                callbacks_made: { type: integer }
+                callbacks_success: { type: integer }
+
+  /import/preview:
+    post:
+      summary: Preview uploaded file (auto-detect format, encoding, columns)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  delimiter: { type: string }
+                  encoding: { type: string }
+                  columns: { type: array, items: { type: string } }
+                  sample_rows: { type: array }
+                  suggested_mapping: { type: object }
+                  total_rows: { type: integer }
+
+  /import/history:
+    get:
+      summary: List imports
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+
+  /import/templates/{type}:
+    get:
+      summary: Download template file
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema: { type: string, enum: [journal_csv, journal_xlsx, funnel_csv] }
+
+  # ============ DASHBOARD ============
+  /dashboard/losses:
+    get:
+      summary: Get losses for period
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: start
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: end
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: clinic_id
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  loss_missed: { type: number }
+                  loss_no_callback: { type: number }
+                  loss_low_conversion: { type: number }
+                  loss_no_show: { type: number }
+                  loss_total: { type: number }
+                  recovery_minimum: { type: number }
+                  recovery_good: { type: number }
+                  recovery_excellent: { type: number }
+                  change_vs_previous: { type: number }
+                  period_days: { type: integer }
+
+  /dashboard/funnel:
+    get:
+      summary: Get funnel data for period
+      security: [{ bearerAuth: [] }]
+
+  /dashboard/top-leaks:
+    get:
+      summary: Get top 5 revenue leaks with recommendations
+      security: [{ bearerAuth: [] }]
+
+  /dashboard/forecast:
+    get:
+      summary: Get 3-scenario forecast
+      security: [{ bearerAuth: [] }]
+
+  /dashboard/trends:
+    get:
+      summary: Get loss trends (7/30/90 days)
+      security: [{ bearerAuth: [] }]
+
+  # ============ TASKS ============
+  /tasks:
+    get:
+      summary: List tasks for a day
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: date
+          in: query
+          schema: { type: string, format: date }
+        - name: type
+          in: query
+          schema: { type: string, enum: [callback, confirm_booking, reschedule, follow_up, review_call] }
+        - name: status
+          in: query
+          schema: { type: string, enum: [open, done, postponed, irrelevant] }
+
+  /tasks/summary:
+    get:
+      summary: Aggregated task summary for the day
+      security: [{ bearerAuth: [] }]
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  completed: { type: integer }
+                  progress_pct: { type: number }
+                  groups:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        type: { type: string }
+                        count: { type: integer }
+                        completed: { type: integer }
+                        deadline: { type: string, format: date-time }
+
+  /tasks/{id}:
+    patch:
+      summary: Update task status
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: { type: string, enum: [done, postponed, irrelevant] }
+                result: { type: string, enum: [booked, not_booked, no_answer, rescheduled] }
+                comment: { type: string }
+                postponed_to: { type: string, format: date }
+
+  /tasks/bulk-update:
+    post:
+      summary: Bulk update tasks (aggregated mode)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type: { type: string }
+                completed_count: { type: integer }
+                result_booked: { type: integer }
+                comment: { type: string }
+
+  # ============ OPERATORS ============
+  /operators:
+    get:
+      summary: List operators
+      security: [{ bearerAuth: [] }]
+
+  /operators/ranking:
+    get:
+      summary: Operator ranking with KPI
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: start
+          in: query
+          schema: { type: string, format: date }
+        - name: end
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    operator_id: { type: string }
+                    name: { type: string }
+                    shifts: { type: integer }
+                    calls_answered: { type: integer }
+                    answer_rate: { type: number }
+                    bookings: { type: integer }
+                    booking_rate: { type: number }
+                    show_rate: { type: number }
+                    avg_duration: { type: number }
+                    score: { type: number }
+
+  /anomalies:
+    get:
+      summary: List detected anomalies
+      security: [{ bearerAuth: [] }]
+
+  /anomalies/{id}/acknowledge:
+    patch:
+      summary: Acknowledge anomaly
+      security: [{ bearerAuth: [] }]
+
+  # ============ COACH ============
+  /coach/lessons:
+    get:
+      summary: List lessons with progress
+      security: [{ bearerAuth: [] }]
+
+  /coach/lessons/daily:
+    get:
+      summary: Get today's lesson for current user
+      security: [{ bearerAuth: [] }]
+
+  /coach/lessons/{id}/complete:
+    post:
+      summary: Mark lesson as completed
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                quiz_answer: { type: integer }
+
+  /coach/scripts:
+    get:
+      summary: List script categories and scripts
+      security: [{ bearerAuth: [] }]
+
+  # ============ REPORTS ============
+  /reports/generate:
+    post:
+      summary: Generate report
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, format, period_start, period_end]
+              properties:
+                type: { type: string, enum: [owner_summary, manager_detailed] }
+                format: { type: string, enum: [pdf, html, csv] }
+                period_start: { type: string, format: date }
+                period_end: { type: string, format: date }
+
+  /reports:
+    get:
+      summary: List generated reports
+      security: [{ bearerAuth: [] }]
+
+  /reports/{id}/download:
+    get:
+      summary: Download report file
+      security: [{ bearerAuth: [] }]
+
+  # ============ NOTIFICATIONS ============
+  /notifications:
+    get:
+      summary: List in-app notifications
+      security: [{ bearerAuth: [] }]
+
+  /notifications/read-all:
+    post:
+      summary: Mark all as read
+      security: [{ bearerAuth: [] }]
+
+  /notifications/settings:
+    get:
+      summary: Get notification settings
+      security: [{ bearerAuth: [] }]
+    put:
+      summary: Update notification settings
+      security: [{ bearerAuth: [] }]
+
+  # ============ SETTINGS ============
+  /clinics/current:
+    get:
+      summary: Get current clinic data
+      security: [{ bearerAuth: [] }]
+    put:
+      summary: Update clinic settings
+      security: [{ bearerAuth: [] }]
+
+  /clinics/current/benchmarks:
+    get:
+      summary: Get benchmarks
+      security: [{ bearerAuth: [] }]
+    put:
+      summary: Update benchmarks
+      security: [{ bearerAuth: [] }]
+
+  # ============ USERS ============
+  /users:
+    get:
+      summary: List organization users
+      security: [{ bearerAuth: [] }]
+
+  /users/invite:
+    post:
+      summary: Invite user
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email: { type: string, format: email }
+                role: { type: string, enum: [manager, supervisor, operator] }
+                clinic_id: { type: string, format: uuid }
+
+  # ============ PRIVACY ============
+  /privacy/delete-all:
+    post:
+      summary: Delete all clinic data
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirmation_name]
+              properties:
+                confirmation_name: { type: string }
+
+  /privacy/export-all:
+    post:
+      summary: Export all clinic data (GDPR)
+      security: [{ bearerAuth: [] }]
+
+  /privacy/mode:
+    put:
+      summary: Switch privacy mode
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode]
+              properties:
+                mode: { type: string, enum: [anonymous, personal] }
+                consent_confirmed: { type: boolean }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string }
+        name: { type: string }
+        role: { type: string }
+        clinic_id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
