@@ -3,8 +3,8 @@ FROM node:20-alpine AS base
 # Dependencies
 FROM base AS deps
 WORKDIR /app
-COPY package.json ./
-RUN npm install --legacy-peer-deps
+COPY package.json package-lock.json ./
+RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
 # Build
 FROM base AS builder
@@ -29,7 +29,15 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+
+# Copy templates if they exist
 COPY --from=builder /app/templates ./public/templates
+
+# Copy seed dependencies for db:seed
+COPY --from=builder /app/node_modules/tsx ./node_modules/tsx
+COPY --from=builder /app/node_modules/esbuild ./node_modules/esbuild
+COPY --from=builder /app/package.json ./package.json
 
 USER nextjs
 EXPOSE 3000
