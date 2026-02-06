@@ -1,0 +1,401 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id            String   @id @default(uuid())
+  name          String
+  billingPlan   String   @default("starter") @map("billing_plan")
+  billingStatus String   @default("trial") @map("billing_status")
+  trialEndsAt   DateTime @default(dbgenerated("NOW() + INTERVAL '14 days'")) @map("trial_ends_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  clinics Clinic[]
+  users   User[]
+
+  @@map("organizations")
+}
+
+model Clinic {
+  id             String  @id @default(uuid())
+  organizationId String  @map("organization_id")
+  name           String
+  type           String  @default("dental")
+  timezone       String  @default("Europe/Moscow")
+  chairsCount    Int     @default(3) @map("chairs_count")
+  avgCheck       Float   @default(5000) @map("avg_check")
+  workStart      String  @default("09:00") @map("working_hours_start")
+  workEnd        String  @default("21:00") @map("working_hours_end")
+  logoUrl        String? @map("logo_url")
+  privacyMode    String  @default("anonymous") @map("privacy_mode")
+  consentOk      Boolean @default(false) @map("personal_data_consent_confirmed")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  users        User[]
+  operators    Operator[]
+  imports      Import[]
+  callRecords  CallRecord[]
+  dailyFunnels DailyFunnel[]
+  dailyLosses  DailyLoss[]
+  tasks        Task[]
+  anomalies    Anomaly[]
+  notifications Notification[]
+  reports      Report[]
+  benchmarks   ClinicBenchmark?
+  notifSettings NotificationSetting?
+  scripts      Script[]
+
+  @@map("clinics")
+}
+
+model User {
+  id             String  @id @default(uuid())
+  organizationId String  @map("organization_id")
+  clinicId       String? @map("clinic_id")
+  email          String  @unique
+  passwordHash   String  @map("password_hash")
+  name           String
+  role           String  @default("manager")
+  isActive       Boolean @default(true) @map("is_active")
+  lastLoginAt    DateTime? @map("last_login_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clinic       Clinic?      @relation(fields: [clinicId], references: [id], onDelete: SetNull)
+  imports      Import[]
+  completedTasks Task[]     @relation("TaskCompletedBy")
+  lessonProgress LessonProgress[]
+  reports      Report[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+model ClinicBenchmark {
+  id                  String @id @default(uuid())
+  clinicId            String @unique @map("clinic_id")
+  answerRateTarget    Float  @default(0.9) @map("answer_rate_target")
+  bookingRateTarget   Float  @default(0.55) @map("booking_rate_target")
+  showRateTarget      Float  @default(0.85) @map("show_rate_target")
+  callbackSuccessRate Float  @default(0.6) @map("callback_success_rate")
+  bookingRateCallback Float  @default(0.35) @map("booking_rate_callback")
+  avgMargin           Float  @default(0.6) @map("avg_margin")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@map("clinic_benchmarks")
+}
+
+model Operator {
+  id         String  @id @default(uuid())
+  clinicId   String  @map("clinic_id")
+  name       String
+  externalId String? @map("external_id")
+  isActive   Boolean @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  clinic      Clinic       @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  callRecords CallRecord[]
+  tasks       Task[]
+
+  @@map("operators")
+}
+
+model Import {
+  id            String   @id @default(uuid())
+  clinicId      String   @map("clinic_id")
+  userId        String   @map("user_id")
+  type          String
+  filename      String?
+  status        String   @default("processing")
+  totalRows     Int      @default(0) @map("total_rows")
+  validRows     Int      @default(0) @map("valid_rows")
+  errorRows     Int      @default(0) @map("error_rows")
+  errors        Json     @default("[]")
+  columnMapping Json?    @map("column_mapping")
+  createdAt     DateTime @default(now()) @map("created_at")
+  processedAt   DateTime? @map("processed_at")
+
+  clinic      Clinic       @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id])
+  callRecords CallRecord[]
+  dailyFunnels DailyFunnel[]
+
+  @@map("imports")
+}
+
+model CallRecord {
+  id                String   @id @default(uuid())
+  clinicId          String   @map("clinic_id")
+  importId          String?  @map("import_id")
+  dateTime          DateTime @map("date_time")
+  date              DateTime @db.Date
+  channel           String   @default("phone_in")
+  status            String   @default("answered")
+  durationSec       Int      @default(0) @map("duration_sec")
+  result            String   @default("missed")
+  operatorId        String?  @map("operator_id")
+  rejectReason      String?  @map("reject_reason")
+  patientId         String?  @map("patient_id")
+  callbackDone      Boolean  @default(false) @map("callback_done")
+  callbackAt        DateTime? @map("callback_at")
+  callbackResult    String?  @map("callback_result")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  clinic   Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  import   Import?   @relation(fields: [importId], references: [id], onDelete: SetNull)
+  operator Operator? @relation(fields: [operatorId], references: [id], onDelete: SetNull)
+  tasks    Task[]
+
+  @@index([clinicId, date])
+  @@index([operatorId, date])
+  @@map("call_records")
+}
+
+model DailyFunnel {
+  id               String   @id @default(uuid())
+  clinicId         String   @map("clinic_id")
+  date             DateTime @db.Date
+  importId         String?  @map("import_id")
+  callsTotal       Int      @default(0) @map("calls_total")
+  callsAnswered    Int      @default(0) @map("calls_answered")
+  callsMissed      Int      @default(0) @map("calls_missed")
+  booked           Int      @default(0)
+  visited          Int      @default(0)
+  avgCheck         Float?   @map("avg_check")
+  callbacksMade    Int      @default(0) @map("callbacks_made")
+  callbacksSuccess Int      @default(0) @map("callbacks_success")
+  source           String   @default("manual")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  clinic Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  import Import? @relation(fields: [importId], references: [id], onDelete: SetNull)
+
+  @@unique([clinicId, date])
+  @@map("daily_funnels")
+}
+
+model DailyLoss {
+  id                String   @id @default(uuid())
+  clinicId          String   @map("clinic_id")
+  date              DateTime @db.Date
+  lossMissed        Float    @default(0) @map("loss_missed")
+  lossNoCallback    Float    @default(0) @map("loss_no_callback")
+  lossLowConversion Float    @default(0) @map("loss_low_conversion")
+  lossNoShow        Float    @default(0) @map("loss_no_show")
+  lossTotal         Float    @default(0) @map("loss_total")
+  recoveryMinimum   Float    @default(0) @map("recovery_minimum")
+  recoveryGood      Float    @default(0) @map("recovery_good")
+  recoveryExcellent Float    @default(0) @map("recovery_excellent")
+  funnelData        Json     @default("{}") @map("funnel_data")
+  coefficients      Json     @default("{}") @map("coefficients_used")
+  calculatedAt      DateTime @default(now()) @map("calculated_at")
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@unique([clinicId, date])
+  @@map("daily_losses")
+}
+
+model Task {
+  id                 String    @id @default(uuid())
+  clinicId           String    @map("clinic_id")
+  date               DateTime  @db.Date
+  type               String
+  priority           String    @default("medium")
+  status             String    @default("open")
+  deadline           DateTime?
+  description        String
+  sourceCallId       String?   @map("source_call_id")
+  assignedOperatorId String?   @map("assigned_operator_id")
+  completedById      String?   @map("completed_by")
+  completedAt        DateTime? @map("completed_at")
+  result             String?
+  comment            String?
+  postponedTo        DateTime? @db.Date @map("postponed_to")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  clinic     Clinic      @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  sourceCall CallRecord? @relation(fields: [sourceCallId], references: [id], onDelete: SetNull)
+  assignedOp Operator?   @relation(fields: [assignedOperatorId], references: [id], onDelete: SetNull)
+  completedBy User?      @relation("TaskCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+
+  @@index([clinicId, date, status])
+  @@map("tasks")
+}
+
+model Anomaly {
+  id             String   @id @default(uuid())
+  clinicId       String   @map("clinic_id")
+  detectedAt     DateTime @default(now()) @map("detected_at")
+  type           String
+  severity       String   @default("medium")
+  entityType     String   @map("entity_type")
+  entityId       String?  @map("entity_id")
+  entityName     String?  @map("entity_name")
+  periodStart    DateTime @db.Date @map("period_start")
+  periodEnd      DateTime @db.Date @map("period_end")
+  message        String
+  suggestion     String?
+  data           Json     @default("{}")
+  acknowledged   Boolean  @default(false)
+  acknowledgedBy String?  @map("acknowledged_by")
+  acknowledgedAt DateTime? @map("acknowledged_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId, detectedAt(sort: Desc)])
+  @@map("anomalies")
+}
+
+model LessonCategory {
+  id        String @id @default(uuid())
+  name      String
+  sortOrder Int    @default(0) @map("sort_order")
+  lessons   Lesson[]
+
+  @@map("lesson_categories")
+}
+
+model Lesson {
+  id                   String  @id @default(uuid())
+  categoryId           String? @map("category_id")
+  title                String
+  situation            String
+  correctScript        String  @map("correct_script")
+  incorrectScript      String  @map("incorrect_script")
+  incorrectExplanation String  @map("incorrect_explanation")
+  quizQuestion         String  @map("quiz_question")
+  quizOptions          Json    @map("quiz_options")
+  quizCorrectIndex     Int     @map("quiz_correct_index")
+  sortOrder            Int     @default(0) @map("sort_order")
+  isActive             Boolean @default(true) @map("is_active")
+
+  category LessonCategory? @relation(fields: [categoryId], references: [id])
+  progress LessonProgress[]
+
+  @@map("lessons")
+}
+
+model LessonProgress {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  lessonId    String   @map("lesson_id")
+  completedAt DateTime @default(now()) @map("completed_at")
+  quizAnswer  Int?     @map("quiz_answer")
+  quizCorrect Boolean? @map("quiz_correct")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@map("lesson_progress")
+}
+
+model ScriptCategory {
+  id        String  @id @default(uuid())
+  clinicId  String? @map("clinic_id")
+  name      String
+  sortOrder Int     @default(0) @map("sort_order")
+  scripts   Script[]
+
+  @@map("script_categories")
+}
+
+model Script {
+  id             String  @id @default(uuid())
+  categoryId     String? @map("category_id")
+  clinicId       String? @map("clinic_id")
+  type           String
+  text           String
+  complianceNote String? @map("compliance_note")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  category ScriptCategory? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  clinic   Clinic?         @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@map("scripts")
+}
+
+model NotificationSetting {
+  id               String  @id @default(uuid())
+  clinicId         String  @unique @map("clinic_id")
+  emailMorning     Boolean @default(true) @map("email_morning")
+  emailMorningTime String  @default("08:30") @map("email_morning_time")
+  emailMidday      Boolean @default(true) @map("email_midday")
+  emailMiddayTime  String  @default("12:30") @map("email_midday_time")
+  emailEvening     Boolean @default(true) @map("email_evening")
+  emailEveningTime String  @default("20:30") @map("email_evening_time")
+  emailRecipients  String[] @default([]) @map("email_recipients")
+  webPushEnabled   Boolean @default(true) @map("web_push_enabled")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@map("notification_settings")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  clinicId  String   @map("clinic_id")
+  userId    String?  @map("user_id")
+  type      String
+  title     String
+  body      String?
+  link      String?
+  read      Boolean  @default(false)
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+model Report {
+  id          String   @id @default(uuid())
+  clinicId    String   @map("clinic_id")
+  userId      String   @map("user_id")
+  type        String
+  format      String   @default("pdf")
+  periodStart DateTime @db.Date @map("period_start")
+  periodEnd   DateTime @db.Date @map("period_end")
+  fileUrl     String?  @map("file_url")
+  status      String   @default("generating")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@map("reports")
+}
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  clinicId   String   @map("clinic_id")
+  userId     String?  @map("user_id")
+  action     String
+  entityType String?  @map("entity_type")
+  entityId   String?  @map("entity_id")
+  details    Json     @default("{}")
+  ipAddress  String?  @map("ip_address")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([clinicId, createdAt(sort: Desc)])
+  @@map("audit_log")
+}
